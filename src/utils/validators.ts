@@ -1,11 +1,10 @@
-import postgres from 'postgres';
-import { NextResponse, NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-abstract class Validator {
+export abstract class Validator {
   abstract validate(data: any): NextResponse | null;
 }
 
-class RequiredFieldsValidator extends Validator {
+export class RequiredFieldsValidator extends Validator {
   private requiredFields: string[];
   
   constructor(fields: string[]) {
@@ -30,7 +29,7 @@ class RequiredFieldsValidator extends Validator {
   }
 }
 
-class TypeValidator extends Validator {
+export class TypeValidator extends Validator {
   private expectedTypes: Record<string, string>;
   
   constructor(expectedTypes: Record<string, string>) {
@@ -60,7 +59,7 @@ class TypeValidator extends Validator {
   }
 }
 
-class TitleValidator extends Validator {
+export class TitleValidator extends Validator {
   validate(title: string): NextResponse | null {
     if (title.trim().length < 5 || title.trim().length > 100) {
       return NextResponse.json(
@@ -76,7 +75,7 @@ class TitleValidator extends Validator {
   }
 }
 
-class DescriptionValidator extends Validator {
+export class DescriptionValidator extends Validator {
   private minLength: number;
   private maxLength: number;
   
@@ -129,7 +128,7 @@ class DescriptionValidator extends Validator {
   }
 }
 
-class AuthorValidator extends Validator {
+export class AuthorValidator extends Validator {
   validate(author: string): NextResponse | null {
     const issues: string[] = [];
     
@@ -167,79 +166,4 @@ class AuthorValidator extends Validator {
 
     return null;
   }
-}
-
-class DatabaseService {
-  private sql: any;
-  
-  constructor(connectionString: string) {
-    this.sql = postgres(connectionString);
-  }
-  
-  async insertPost(title: string, description: string, author: string): Promise<void> {
-    await this.sql`INSERT INTO "POST-DB" (title, description, author) VALUES (${title}, ${description}, ${author})`;
-  }
-  
-  disconnect(): void {
-    this.sql.end();
-  }
-}
-
-class PostHandler {
-  private validators: Validator[];
-  private dbService: DatabaseService;
-  
-  constructor(dbConnectionString: string) {
-    this.validators = [
-      new RequiredFieldsValidator(['title', 'description', 'author']),
-      new TypeValidator({
-        title: 'string',
-        description: 'string',
-        author: 'string'
-      }),
-      new TitleValidator(),
-      new DescriptionValidator(),
-      new AuthorValidator()
-    ];
-    
-    this.dbService = new DatabaseService(dbConnectionString);
-  }
-  
-  async handleRequest(req: NextRequest): Promise<NextResponse> {
-    try {
-      const payload = await req.json();
-      
-      for (const validator of this.validators) {
-        const result = validator.validate(payload);
-        if (result) return result;
-      }
-      
-      await this.dbService.insertPost(payload.title, payload.description, payload.author);
-      console.log('Data inserted successfully');
-
-      return NextResponse.json({
-        success: true,
-        message: 'Data saved successfully',
-        data: {
-          title: payload.title,
-          description: payload.description,
-          author: payload.author
-        }
-      });
-
-    } catch (err) {
-      console.error('Error:', err);
-      return NextResponse.json(
-        { error: 'Invalid request', details: String(err) },
-        { status: 400 }
-      );
-    }
-  }
-}
-
-const connectionString = 'postgresql://postgres.entsyipsaivdjxboyjxu:MIGUELss19@aws-1-us-east-2.pooler.supabase.com:6543/postgres';
-const postHandler = new PostHandler(connectionString);
-
-export async function POST(req: NextRequest) {
-  return postHandler.handleRequest(req);
 }
