@@ -1,4 +1,4 @@
-import { NextResponse, NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { 
   Validator, 
   RequiredFieldsValidator, 
@@ -29,10 +29,8 @@ export class PostHandler {
     this.dbService = new DatabaseService(dbConnectionString);
   }
   
-  async handleRequest(req: NextRequest): Promise<NextResponse> {
-    try {
-      const payload = await req.json();
-      
+  async handlePostCreation(payload: any): Promise<NextResponse> {
+    try {      
       for (const validator of this.validators) {
         const result = validator.validate(payload);
         if (result) return result;
@@ -54,8 +52,8 @@ export class PostHandler {
     } catch (err) {
       console.error('Error:', err);
       return NextResponse.json(
-        { error: 'Invalid request', details: String(err) },
-        { status: 400 }
+        { error: 'Database operation failed', details: String(err) },
+        { status: 500 }
       );
     }
   }
