@@ -148,27 +148,33 @@ export async function POST(req: NextRequest) {
     const authorCheck = validateAuthor(payload.author);
     if (authorCheck) return authorCheck;
 
-    console.log('Valid submission:', {
-      title: payload.title,
-      description: payload.description,
-      author: payload.author
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: 'All data is valid',
-      submittedData: {
-        title: payload.title,
-        description: payload.description,
-        author: payload.author
-      }
-    });
-
     const sql = postgres('postgresql://postgres.entsyipsaivdjxboyjxu:MIGUELss19@aws-1-us-east-2.pooler.supabase.com:6543/postgres');
+
+    try {
+      await sql`INSERT INTO "POST-DB" (title, description, author) VALUES (${payload.title}, ${payload.description}, ${payload.author})`;
+      console.log('Data inserted successfully');
+
+      return NextResponse.json({
+        success: true,
+        message: 'Data saved successfully',
+        data: {
+          title: payload.title,
+          description: payload.description,
+          author: payload.author
+        }
+      });
+
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      return NextResponse.json(
+        { error: 'Database operation failed', details: String(dbError) },
+        { status: 500 }
+      );
+    }
 
   } catch (err) {
     return NextResponse.json(
-      { error: 'Invalid JSON payload', details: String(err) },
+      { error: 'Invalid request', details: String(err) },
       { status: 400 }
     );
   }
