@@ -1,157 +1,220 @@
 import postgres from 'postgres';
 import { NextResponse, NextRequest } from 'next/server';
 
-const validateFields = (data: any) => {
-  if (!data || data.title === undefined || data.description === undefined || data.author === undefined) {
-    return NextResponse.json(
-      { error: 'Missing required fields', required: ['title', 'description', 'author'] },
-      { status: 400 }
-    );
-  }
-  return null;
-};
+abstract class Validator {
+  abstract validate(data: any): NextResponse | null;
+}
 
-const validateTypes = (data: any) => {
-  const types = {
-    title: typeof data.title,
-    description: typeof data.description,
-    author: typeof data.author
-  };
-
-  if (types.title !== 'string' || types.description !== 'string' || types.author !== 'string') {
-    return NextResponse.json(
-      { 
-        error: 'Type validation failed',
-        expected: 'All fields should be strings',
-        received: types
-      },
-      { status: 400 }
-    );
-  }
-  return null;
-};
-
-const validateTitle = (title: string) => {
-  if (title.trim().length < 5 || title.trim().length > 100) {
-    return NextResponse.json(
-      { 
-        error: 'Title must be between 5-100 characters',
-        value: title,
-        length: title.length
-      },
-      { status: 400 }
-    );
-  }
-  return null;
-};
-
-const validateDescription = (description: string) => {
-  const trimmedDesc = description.trim();
+class RequiredFieldsValidator extends Validator {
+  private requiredFields: string[];
   
-  if (!trimmedDesc) {
-    return NextResponse.json(
-      { 
-        error: 'Description cannot be empty or just whitespace',
-        value: description
-      },
-      { status: 400 }
-    );
+  constructor(fields: string[]) {
+    super();
+    this.requiredFields = fields;
   }
-
-  const minLength = 5;
-  const maxLength = 1000;
   
-  if (trimmedDesc.length < minLength) {
-    return NextResponse.json(
-      { 
-        error: `Description too short (minimum ${minLength} characters required)`,
-        value: description,
-        currentLength: trimmedDesc.length,
-        requiredMinimum: minLength,
-        remainingCharacters: minLength - trimmedDesc.length
-      },
-      { status: 400 }
-    );
-  }
-
-  if (trimmedDesc.length > maxLength) {
-    return NextResponse.json(
-      { 
-        error: `Description too long (maximum ${maxLength} characters allowed)`,
-        value: description,
-        currentLength: trimmedDesc.length,
-        characterLimit: maxLength,
-        excessCharacters: trimmedDesc.length - maxLength
-      },
-      { status: 400 }
-    );
-  }
-
-  return null;
-};
-
-const validateAuthor = (author: string) => {
-  const issues: string[] = [];
-  
-  if (!/^[A-ZÁÉÍÓÚÑÜ]/.test(author)) {
-    issues.push('Must start with capital letter');
-  }
-
-  if (/[^A-Za-záéíóúñü'\-. ]/.test(author)) {
-    issues.push('Contains invalid characters');
-  }
-
-  if (!/^[A-ZÁÉÍÓÚÑÜ][a-záéíóúñü'\-.]*(?: [A-ZÁÉÍÓÚÑÜ][a-záéíóúñü'\-.]*)*$/.test(author)) {
-    issues.push('Invalid name format (should be "FirstName LastName")');
-  }
-
-  if (author.replace(/[^a-záéíóúñü]/gi, '').length < 2) {
-    issues.push('Name too short');
-  }
-
-  if (issues.length > 0) {
-    return NextResponse.json(
-      { 
-        error: 'Author name validation failed',
-        issues,
-        value: author,
-        suggestions: [
-          'Use proper capitalization',
-          'Only use letters, spaces, hyphens, and apostrophes',
-          'Example: "Miguel-Salguero"'
-        ]
-      },
-      { status: 400 }
-    );
-  }
-
-  return null;
-};
-
-// main function
-export async function POST(req: NextRequest) {
-  try {
-    const payload = await req.json();
+  validate(data: any): NextResponse | null {
+    const missingFields = this.requiredFields.filter(field => data[field] === undefined);
     
-    const fieldCheck = validateFields(payload);
-    if (fieldCheck) return fieldCheck;
+    if (missingFields.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Missing required fields', 
+          missing: missingFields,
+          required: this.requiredFields 
+        },
+        { status: 400 }
+      );
+    }
+    return null;
+  }
+}
 
-    const typeCheck = validateTypes(payload);
-    if (typeCheck) return typeCheck;
+class TypeValidator extends Validator {
+  private expectedTypes: Record<string, string>;
+  
+  constructor(expectedTypes: Record<string, string>) {
+    super();
+    this.expectedTypes = expectedTypes;
+  }
+  
+  validate(data: any): NextResponse | null {
+    const typeErrors: Record<string, string> = {};
+    
+    Object.keys(this.expectedTypes).forEach(field => {
+      if (typeof data[field] !== this.expectedTypes[field]) {
+        typeErrors[field] = `Expected ${this.expectedTypes[field]}, got ${typeof data[field]}`;
+      }
+    });
+    
+    if (Object.keys(typeErrors).length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Type validation failed',
+          details: typeErrors
+        },
+        { status: 400 }
+      );
+    }
+    return null;
+  }
+}
 
-    const titleCheck = validateTitle(payload.title);
-    if (titleCheck) return titleCheck;
+class TitleValidator extends Validator {
+  validate(title: string): NextResponse | null {
+    if (title.trim().length < 5 || title.trim().length > 100) {
+      return NextResponse.json(
+        { 
+          error: 'Title must be between 5-100 characters',
+          value: title,
+          length: title.length
+        },
+        { status: 400 }
+      );
+    }
+    return null;
+  }
+}
 
-    const descCheck = validateDescription(payload.description);
-    if (descCheck) return descCheck;
+class DescriptionValidator extends Validator {
+  private minLength: number;
+  private maxLength: number;
+  
+  constructor(minLength = 5, maxLength = 1000) {
+    super();
+    this.minLength = minLength;
+    this.maxLength = maxLength;
+  }
+  
+  validate(description: string): NextResponse | null {
+    const trimmedDesc = description.trim();
+    
+    if (!trimmedDesc) {
+      return NextResponse.json(
+        { 
+          error: 'Description cannot be empty or just whitespace',
+          value: description
+        },
+        { status: 400 }
+      );
+    }
+    
+    if (trimmedDesc.length < this.minLength) {
+      return NextResponse.json(
+        { 
+          error: `Description too short (minimum ${this.minLength} characters required)`,
+          value: description,
+          currentLength: trimmedDesc.length,
+          requiredMinimum: this.minLength,
+          remainingCharacters: this.minLength - trimmedDesc.length
+        },
+        { status: 400 }
+      );
+    }
 
-    const authorCheck = validateAuthor(payload.author);
-    if (authorCheck) return authorCheck;
+    if (trimmedDesc.length > this.maxLength) {
+      return NextResponse.json(
+        { 
+          error: `Description too long (maximum ${this.maxLength} characters allowed)`,
+          value: description,
+          currentLength: trimmedDesc.length,
+          characterLimit: this.maxLength,
+          excessCharacters: trimmedDesc.length - this.maxLength
+        },
+        { status: 400 }
+      );
+    }
 
-    const sql = postgres('postgresql://postgres.entsyipsaivdjxboyjxu:MIGUELss19@aws-1-us-east-2.pooler.supabase.com:6543/postgres');
+    return null;
+  }
+}
 
+class AuthorValidator extends Validator {
+  validate(author: string): NextResponse | null {
+    const issues: string[] = [];
+    
+    if (!/^[A-ZÁÉÍÓÚÑÜ]/.test(author)) {
+      issues.push('Must start with capital letter');
+    }
+
+    if (/[^A-Za-záéíóúñü'\-. ]/.test(author)) {
+      issues.push('Contains invalid characters');
+    }
+
+    if (!/^[A-ZÁÉÍÓÚÑÜ][a-záéíóúñü'\-.]*(?: [A-ZÁÉÍÓÚÑÜ][a-záéíóúñü'\-.]*)*$/.test(author)) {
+      issues.push('Invalid name format (should be "FirstName LastName")');
+    }
+
+    if (author.replace(/[^a-záéíóúñü]/gi, '').length < 2) {
+      issues.push('Name too short');
+    }
+
+    if (issues.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Author name validation failed',
+          issues,
+          value: author,
+          suggestions: [
+            'Use proper capitalization',
+            'Only use letters, spaces, hyphens, and apostrophes',
+            'Example: "Miguel-Salguero"'
+          ]
+        },
+        { status: 400 }
+      );
+    }
+
+    return null;
+  }
+}
+
+class DatabaseService {
+  private sql: any;
+  
+  constructor(connectionString: string) {
+    this.sql = postgres(connectionString);
+  }
+  
+  async insertPost(title: string, description: string, author: string): Promise<void> {
+    await this.sql`INSERT INTO "POST-DB" (title, description, author) VALUES (${title}, ${description}, ${author})`;
+  }
+  
+  disconnect(): void {
+    this.sql.end();
+  }
+}
+
+class PostHandler {
+  private validators: Validator[];
+  private dbService: DatabaseService;
+  
+  constructor(dbConnectionString: string) {
+    this.validators = [
+      new RequiredFieldsValidator(['title', 'description', 'author']),
+      new TypeValidator({
+        title: 'string',
+        description: 'string',
+        author: 'string'
+      }),
+      new TitleValidator(),
+      new DescriptionValidator(),
+      new AuthorValidator()
+    ];
+    
+    this.dbService = new DatabaseService(dbConnectionString);
+  }
+  
+  async handleRequest(req: NextRequest): Promise<NextResponse> {
     try {
-      await sql`INSERT INTO "POST-DB" (title, description, author) VALUES (${payload.title}, ${payload.description}, ${payload.author})`;
+      const payload = await req.json();
+      
+      for (const validator of this.validators) {
+        const result = validator.validate(payload);
+        if (result) return result;
+      }
+      
+      await this.dbService.insertPost(payload.title, payload.description, payload.author);
       console.log('Data inserted successfully');
 
       return NextResponse.json({
@@ -164,18 +227,19 @@ export async function POST(req: NextRequest) {
         }
       });
 
-    } catch (dbError) {
-      console.error('Database error:', dbError);
+    } catch (err) {
+      console.error('Error:', err);
       return NextResponse.json(
-        { error: 'Database operation failed', details: String(dbError) },
-        { status: 500 }
+        { error: 'Invalid request', details: String(err) },
+        { status: 400 }
       );
     }
-
-  } catch (err) {
-    return NextResponse.json(
-      { error: 'Invalid request', details: String(err) },
-      { status: 400 }
-    );
   }
+}
+
+const connectionString = 'postgresql://postgres.entsyipsaivdjxboyjxu:MIGUELss19@aws-1-us-east-2.pooler.supabase.com:6543/postgres';
+const postHandler = new PostHandler(connectionString);
+
+export async function POST(req: NextRequest) {
+  return postHandler.handleRequest(req);
 }
