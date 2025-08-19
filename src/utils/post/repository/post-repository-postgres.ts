@@ -1,20 +1,35 @@
+import postgres from 'postgres';
 import { Post } from '../post';
 import { PostRepository } from './post-repository-interface';
-import { DatabaseService } from '@/utils/databaseService';
+import { PostTitle } from '../post-title';
+import { PostDescription } from '../post-description';
+import { PostAuthor } from '../post-author';
 
 export class PostRepositoryPostgres implements PostRepository {
-  private dbService: DatabaseService;
+  private sql: any;
 
   constructor(connectionString: string) {
-    this.dbService = new DatabaseService(connectionString);
+    this.sql = postgres(connectionString);
   }
 
   async save(post: Post): Promise<void> {
     const { title, description, author } = post.toObject();
-    await this.dbService.insertPost(title, description, author);
+    await this.sql`INSERT INTO "POST-DB" (title, description, author) VALUES (${title}, ${description}, ${author})`;
+  }
+
+  async findAll(): Promise<Post[]> {
+    const postsData = await this.sql`SELECT * FROM "POST-DB"`;
+    
+    return postsData.map((postData: any) => {
+      return new Post(
+        new PostTitle(postData.title),
+        new PostDescription(postData.description),
+        new PostAuthor(postData.author)
+      );
+    });
   }
 
   disconnect(): void {
-    this.dbService.disconnect();
+    this.sql.end();
   }
 }
