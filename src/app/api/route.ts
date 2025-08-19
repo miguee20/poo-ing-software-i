@@ -1,3 +1,4 @@
+import postgres from 'postgres';
 import { NextResponse, NextRequest } from 'next/server';
 
 const validateFields = (data: any) => {
@@ -162,6 +163,8 @@ export async function POST(req: NextRequest) {
         author: payload.author
       }
     });
+
+    const sql = postgres('postgresql://postgres.entsyipsaivdjxboyjxu:MIGUELss19@aws-1-us-east-2.pooler.supabase.com:6543/postgres');
 
   } catch (err) {
     return NextResponse.json(
