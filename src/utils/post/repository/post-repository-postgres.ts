@@ -29,6 +29,34 @@ export class PostRepositoryPostgres implements PostRepository {
     });
   }
 
+  async findById(id: string): Promise<Post | null> {
+    const postData = await this.sql`
+      SELECT * FROM "POST-DB" WHERE id = ${id}
+    `;
+
+    if (postData.length === 0) {
+      return null;
+    }
+
+    const data = postData[0];
+    return new Post(
+      new PostTitle(data.title),
+      new PostDescription(data.description),
+      new PostAuthor(data.author)
+    );
+  }
+
+  async update(id: string, post: Post): Promise<void> {
+    const { title, description, author } = post.toObject();
+    await this.sql`
+      UPDATE "POST-DB" 
+      SET title = ${title}, description = ${description}, author = ${author}
+      WHERE id = ${id}
+    `;
+  }
+
+
+
   disconnect(): void {
     this.sql.end();
   }
