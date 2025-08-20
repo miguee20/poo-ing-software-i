@@ -29,31 +29,47 @@ export class PostRepositoryPostgres implements PostRepository {
     });
   }
 
-  async findById(id: string): Promise<Post | null> {
-    const postData = await this.sql`
-      SELECT * FROM "POST-DB" WHERE id = ${id}
-    `;
+async findById(id: string): Promise<Post | null> {
+  const numericId = parseInt(id, 10);
+  
+  const postData = await this.sql`
+    SELECT * FROM "POST-DB" WHERE id = ${numericId}
+  `;
 
-    if (postData.length === 0) {
-      return null;
-    }
-
-    const data = postData[0];
-    return new Post(
-      new PostTitle(data.title),
-      new PostDescription(data.description),
-      new PostAuthor(data.author)
-    );
+  if (postData.length === 0) {
+    return null;
   }
 
-  async update(id: string, post: Post): Promise<void> {
-    const { title, description, author } = post.toObject();
-    await this.sql`
-      UPDATE "POST-DB" 
-      SET title = ${title}, description = ${description}, author = ${author}
-      WHERE id = ${id}
-    `;
+  const data = postData[0];
+  return new Post(
+    new PostTitle(data.title),
+    new PostDescription(data.description),
+    new PostAuthor(data.author)
+  );
+}
+
+async update(id: string, post: Post): Promise<void> {
+  const numericId = parseInt(id, 10); 
+  const { title, description, author } = post.toObject();
+  
+  const result = await this.sql`
+    UPDATE "POST-DB" 
+    SET title = ${title}, description = ${description}, author = ${author}
+    WHERE id = ${numericId}
+  `;
+}
+
+async delete(id: string): Promise<void> {
+  const numericId = parseInt(id, 10); 
+  
+  const result = await this.sql`
+    DELETE FROM "POST-DB" WHERE id = ${numericId}
+  `;
+  
+  if (result.count === 0) {
+    throw new Error('Post not found');
   }
+}
 
 
 

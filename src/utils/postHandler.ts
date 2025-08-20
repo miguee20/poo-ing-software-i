@@ -29,12 +29,23 @@ export class PostHandler {
     this.dbService = new DatabaseService(dbConnectionString);
   }
   
-  async handlePostCreation(payload: any): Promise<NextResponse> {
+    async handlePostCreation(payload: any): Promise<NextResponse> {
     try {      
-      for (const validator of this.validators) {
+      
+      for (const validator of [this.validators[0], this.validators[1]]) {
         const result = validator.validate(payload);
         if (result) return result;
       }
+      
+      
+      const titleResult = this.validators[2].validate(payload.title);
+      if (titleResult) return titleResult;
+      
+      const descResult = this.validators[3].validate(payload.description);
+      if (descResult) return descResult;
+      
+      const authorResult = this.validators[4].validate(payload.author);
+      if (authorResult) return authorResult;
       
       await this.dbService.insertPost(payload.title, payload.description, payload.author);
       console.log('Data inserted successfully');
